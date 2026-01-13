@@ -91,14 +91,14 @@ agent-verification/
 ### 1. 环境准备
 
 **系统要求**:
-- Python 3.9+
+- Python 3.10
 - pip 包管理工具
 
 ### 2. 安装依赖
 
 ```bash
 # 克隆项目
-git clone <repository-url>
+git clone https://github.com/evob-z/TripGuard.git
 cd agent-verification
 
 # 安装依赖
