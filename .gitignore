@@ -1,0 +1,32 @@
+# 1. 敏感配置
+.env
+.env.local
+config_private.py
+
+# 2. Python 编译文件 & 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+htmlcov/
+.pytest_cache/
+
+# 3. 虚拟环境
+venv/
+.venv/
+env/
+
+# 4. IDE 配置文件 (可选，建议忽略)
+.idea/
+.vscode/
+*.swp
+
+# 5. 数据库 & RAG 数据 (通常太大或包含本地状态，不建议上传)
+# *.sqlite3
+# *.db
+# agent-verification/RAG/data/chroma_db/
+# chroma_db/
+
+# 6. 系统文件
+.DS_Store
