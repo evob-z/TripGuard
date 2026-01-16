@@ -192,7 +192,7 @@ class ApprovalDecision(BaseModel):
 def make_decision_node(state: TripState):
     """
     决策节点：基于天气和政策做出审批决定
-    修复：使用 PydanticOutputParser 替代不支持的 with_structured_output
+    使用 PydanticOutputParser 替代deepseek不支持的 with_structured_output
     """
     print("--- [Decision] 正在呼叫 LLM 做出决策 ---")
 

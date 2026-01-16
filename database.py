@@ -110,5 +110,24 @@ def save_chat_log(session_id, role, content):
         session.close()
 
 
+def get_chat_history(session_id):
+    """根据 session_id 获取历史聊天记录"""
+    session = SessionLocal()
+    try:
+        # 按时间顺序查询该 session 的所有日志
+        logs = session.query(ChatLog) \
+            .filter(ChatLog.session_id == session_id) \
+            .order_by(ChatLog.created_at) \
+            .all()
+
+        # 返回格式：[(role, content), ...]
+        return [(log.role, log.content) for log in logs]
+    except Exception as e:
+        print(f"!!! [DB Error] 读取历史记录失败: {e}")
+        return []
+    finally:
+        session.close()
+
+
 # 模块被导入时自动检查连接
 init_db()
