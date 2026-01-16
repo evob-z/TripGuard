@@ -12,7 +12,7 @@ from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 # 使用绝对路径，基于当前文件所在目录定位数据库路径
 # 无论从哪里调用，都能正确找到数据库
 CURRENT_FILE_DIR = Path(__file__).parent.resolve()
-PERSIST_DIRECTORY = CURRENT_FILE_DIR / "md" / "chroma_db"
+PERSIST_DIRECTORY = CURRENT_FILE_DIR / "data" / "chroma_db"
 
 # def get_retriever():
 #     """

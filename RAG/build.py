@@ -15,12 +15,12 @@ load_dotenv()
 # --- 配置项 ---
 # 使用绝对路径，基于当前文件所在目录定位
 CURRENT_FILE_DIR = Path(__file__).parent.resolve()
-knowledge_base_file = CURRENT_FILE_DIR / "md" / "policy.txt"
-persist_directory = CURRENT_FILE_DIR / "md" / "chroma_db"  # 数据库存储路径
+knowledge_base_file = CURRENT_FILE_DIR / "data" / "policy.txt"
+persist_directory = CURRENT_FILE_DIR / "data" / "chroma_db"  # 数据库存储路径
 
 # 1. 检查数据源
 if not knowledge_base_file.exists():
-    print(f"❌ 错误: 知识库文件 {knowledge_base_file} 未找到。请检查 md 目录。")
+    print(f"❌ 错误: 知识库文件 {knowledge_base_file} 未找到。请检查 data 目录。")
     exit()
 
 # 2. 检查旧数据库
