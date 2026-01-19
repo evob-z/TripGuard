@@ -2,118 +2,136 @@ import os
 from pathlib import Path
 
 from langchain_chroma import Chroma
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
+from langchain_community.retrievers import BM25Retriever
+from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 
-# Rerank 相关组件
-from langchain_classic.retrievers import ContextualCompressionRetriever
-from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
-from langchain_community.cross_encoders import HuggingFaceCrossEncoder
-
-# 使用绝对路径，基于当前文件所在目录定位数据库路径
-# 无论从哪里调用，都能正确找到数据库
+# --- 基础依赖 ---
+# 既然自动的 EnsembleRetriever 总是报错，我们这里手动实现“检索+去重+重排”的逻辑
+# 这需要安装: pip install rank_bm25 sentence-transformers
+os.environ['HF_HUB_OFFLINE'] = '1'
+# --- 路径配置 ---
 CURRENT_FILE_DIR = Path(__file__).parent.resolve()
 PERSIST_DIRECTORY = CURRENT_FILE_DIR / "data" / "chroma_db"
 
-# def get_retriever():
-#     """
-#     直接加载已存在的向量数据库
-#     """
-#     if not os.path.exists(PERSIST_DIRECTORY):
-#         raise FileNotFoundError(f"数据库 {PERSIST_DIRECTORY} 不存在，请先运行 python -m app.rag.build 构建数据库。")
-#
-#     # 创建一个嵌入（Embedding）模型实例，用于将用户的查询问题转换为向量表示
-#     embedding_model = HuggingFaceEmbeddings(model_name="BAAI/bge-m3")  # 如果构建时用了这个
-#
-#     # 加载数据库
-#     vector_db = Chroma(
-#         persist_directory=PERSIST_DIRECTORY,
-#         embedding_function=embedding_model
-#     )
-#
-#     # 转换为检索器 (k=3 表示每次找最相似的3条)
-#     return vector_db.as_retriever(search_kwargs={"k": 3})
 
-# 全局变量缓存，防止每次调用都重新加载模型
-_cached_retriever = None
-
-
-def get_advanced_retriever():
+def get_manual_hybrid_results(query: str):
     """
-    构建【检索 + 重排序】的高级检索管道
+    手动执行：向量检索 + BM25检索 -> 简单合并 -> Rerank
     """
-    global _cached_retriever
-    if _cached_retriever:
-        return _cached_retriever
+    print(f"🔍 开始执行混合检索: {query}")
 
+    # 1. 初始化 Embedding 模型 (CPU)
+    # 这一步如果不加 model_kwargs={"device": "cpu"}，在无显卡机器上可能会报错
+    embedding_model = HuggingFaceEmbeddings(
+        model_name="BAAI/bge-m3",
+        model_kwargs={"device": "cpu"},
+        encode_kwargs={'normalize_embeddings': True}
+    )
+
+    # 2. 向量检索 (Vector Search) - 语义召回
     if not PERSIST_DIRECTORY.exists():
-        raise FileNotFoundError(
-            f"请先构建数据库。\n"
-            f"期望的数据库路径: {PERSIST_DIRECTORY}\n"
-            f"请运行: python -m RAG.build 或 cd RAG && python build.py"
-        )
+        raise FileNotFoundError(f"数据库未找到: {PERSIST_DIRECTORY}")
 
-    # 1. 基础向量检索器 (Base Retriever) - 负责"粗召回"
-    embedding_model = HuggingFaceEmbeddings(model_name="BAAI/bge-m3")  # 如果构建时用了这个
     vector_db = Chroma(
-        persist_directory=str(PERSIST_DIRECTORY),  # Chroma需要字符串路径
-        embedding_function=embedding_model
+        persist_directory=str(PERSIST_DIRECTORY),
+        embedding_function=embedding_model,
+        collection_name="trip_guard_collection"
     )
-    base_retriever = vector_db.as_retriever(
-        search_type="similarity",
-        search_kwargs={"k": 20}  # 粗召回前 20 条
+    # 获取 Top 10
+    print("   - 执行向量检索...")
+    vector_docs = vector_db.similarity_search(query, k=10)
+
+    # 3. BM25 检索 (Keyword Search) - 关键词召回
+    print("   - 执行关键词检索...")
+    try:
+        # 获取所有文档用于构建索引
+        all_docs = vector_db.get()['documents']
+        all_metadatas = vector_db.get()['metadatas']
+
+        if not all_docs:
+            print("   ⚠️ 警告: 数据库为空，跳过 BM25")
+            keyword_docs = []
+        else:
+            bm25_docs = [Document(page_content=t, metadata=m) for t, m in zip(all_docs, all_metadatas)]
+            bm25_retriever = BM25Retriever.from_documents(bm25_docs)
+            bm25_retriever.k = 10
+            keyword_docs = bm25_retriever.invoke(query)
+    except Exception as e:
+        print(f"   ⚠️ BM25 构建失败(可能是第一次运行或依赖缺失): {e}")
+        keyword_docs = []
+
+    # 4. 手动去重合并 (Ensemble Logic)
+    unique_docs = {}
+    # 先放入向量结果，再放入关键词结果
+    for doc in vector_docs + keyword_docs:
+        # 使用内容作为去重键 (防止同一段话被重复召回)
+        key = doc.page_content.strip()
+        if key not in unique_docs:
+            unique_docs[key] = doc
+
+    merged_docs = list(unique_docs.values())
+    print(f"   - 召回合并后文档数: {len(merged_docs)}")
+
+    if not merged_docs:
+        return []
+
+    # 5. 手动重排序 (Rerank Logic)
+    print("   - 执行重排序 (Rerank)...")
+    # 初始化打分模型
+    reranker = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-base")
+
+    # 构造 Pair: [query, doc_content]
+    pairs = [(query, doc.page_content) for doc in merged_docs]
+
+    # 【核心修复】使用 .score() 而不是 .model.predict()
+    scores = reranker.score(pairs)
+
+    # 将分数绑定到文档并排序
+    scored_docs = sorted(
+        zip(merged_docs, scores),
+        key=lambda x: x[1],
+        reverse=True
     )
 
-    # 2. Reranker (重排器) - 负责“精排序”
-    # print(">>> [RAG] 正在加载 BGE-Reranker 模型 (首次运行需下载)...")
+    # 取 Top 3 (且分数不能太低，比如大于 -2)
+    final_top_3 = []
+    for doc, score in scored_docs[:3]:
+        # print(f"      > 得分: {score:.4f} | 内容: {doc.page_content[:20]}...")
+        final_top_3.append(doc)
 
-    # 使用智源的 bge-reranker-base (效果好且体积适中)
-    model = HuggingFaceCrossEncoder(
-        model_name="BAAI/bge-reranker-base",
-        model_kwargs={
-            # "device": "cpu",
-            "tokenizer_kwargs": {"use_fast": False}
-        }
-    )
-
-    # 配置 Reranker: 从 20 条里挑出最准的 3 条
-    reranker = CrossEncoderReranker(model=model, top_n=3)
-
-    # 3. 组装管道
-    compression_retriever = ContextualCompressionRetriever(
-        base_compressor=reranker,
-        base_retriever=base_retriever
-    )
-
-    _cached_retriever = compression_retriever
-    # print(">>> [RAG] Reranker 加载完成，高级检索管道就绪。")
-    return compression_retriever
-
-
-# 延迟初始化全局单例，避免导入时立即执行
-_retriever_instance = None
-
-
-def get_retriever():
-    """获取检索器单例（懒加载）"""
-    global _retriever_instance
-    if _retriever_instance is None:
-        _retriever_instance = get_advanced_retriever()
-    return _retriever_instance
+    return final_top_3
 
 
 def query_policy(query: str) -> str:
     """
-    对外暴露的查询函数
+    对外接口
     """
+    try:
+        # 使用手动混合检索
+        docs = get_manual_hybrid_results(query)
 
-    # 这一步会自动执行：向量检索 -> Rerank打分 -> 截取Top3
-    retriever = get_retriever()  # 使用懒加载方式获取检索器
-    docs = retriever.invoke(query)
+        if not docs:
+            return "未找到相关政策信息。"
 
-    if not docs:
-        return "未找到相关政策。"
+        results = []
+        for i, doc in enumerate(docs):
+            # 获取 source (build.py 中我们只存了文件名)
+            source = doc.metadata.get("source", "未知文件")
+            content = doc.page_content.strip()
 
-    # 打印日志看看 Rerank 选了什么 (调试用)
-    # print(f"--- [RAG Debug] Rerank 选出的最佳片段: {[d.page_content[:20] + '...' for d in docs]} ---")
+            entry = f"【参考资料 {i + 1}】\n来源: {source}\n内容: {content}"
+            results.append(entry)
 
-    return "\n\n".join([doc.page_content for doc in docs])
+        return "\n\n".join(results)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()  # 打印完整报错堆栈
+        return f"检索系统错误: {str(e)}"
+
+
+if __name__ == "__main__":
+    print("-" * 30)
+    print(query_policy("差旅住宿标准"))

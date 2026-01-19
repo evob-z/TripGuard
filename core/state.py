@@ -16,6 +16,7 @@ class TripState(TypedDict):
     destination: Optional[str]  # 目的地
     days: Optional[int]  # 出差天数
     budget: Optional[float]  # 预算
+    job_rank: Optional[str]  # 出差人的职级或职称
 
     # 审批过程数据
     weather: Optional[str]  # 天气状况 (如 "Sunny", "Snow")

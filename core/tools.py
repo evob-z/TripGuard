@@ -2,7 +2,6 @@
 工具定义模块
 定义 Agent 可以使用的工具
 """
-from typing import Optional
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -17,6 +16,7 @@ def lookup_policy_tool(query: str):
     用于查询公司差旅政策、报销标准、费用限制、天气预警规定等。
     当用户询问关于规定的问题时，必须使用此工具。
     """
+    # 尝试执行 RAG 检索
     return query_policy(query)
 
 
@@ -40,3 +40,4 @@ class TripSubmission(BaseModel):
     destination: str = Field(..., description="目的地")
     days: int = Field(..., description="出差天数")
     budget: float = Field(..., description="预算")
+    job_rank: str = Field(..., description="出差人的职级或职称，例如：正高级、副处级、主管等")

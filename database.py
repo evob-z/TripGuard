@@ -31,13 +31,13 @@ class TripRecord(Base):
     # 如果数据库里已经建好了表，这里只是为了让 Python 知道表长什么样
     id = Column(Integer, primary_key=True, index=True)
     session_id = Column(String, index=True)
+    job_rank = Column(String)
     destination = Column(String)
     days = Column(Integer)
     weather = Column(String)
     temp = Column(Integer)
     status = Column(String)
     final_decision = Column(Text)
-    # 你新增的字段
     budget = Column(DECIMAL(10, 2), nullable=True)
     cost = Column(DECIMAL(10, 2), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
@@ -62,12 +62,13 @@ def init_db():
 
 # 4. 写入工具函数
 
-def save_trip_record(session_id, destination, days, weather, temp, status, final_decision, budget=None, cost=None):
+def save_trip_record(session_id, job_rank, destination, days, weather, temp, status, final_decision, budget=None, cost=None):
     """保存审批单"""
     session = SessionLocal()
     try:
         record = TripRecord(
             session_id=session_id,
+            job_rank=job_rank,
             destination=destination,
             days=days,
             weather=weather,

@@ -49,7 +49,7 @@ def build_workflow():
 
     # 添加节点
     workflow.add_node("agent", agent_node)
-    workflow.add_node("tool_executor", ToolNode(tools))
+    workflow.add_node("tool_executor", ToolNode(tools, handle_tool_errors=True))
     workflow.add_node("data_sync", data_sync_node)
     workflow.add_node("check_weather", check_weather_node)
     workflow.add_node("compliance_check", compliance_check_node)
