@@ -2,7 +2,6 @@ import streamlit as st
 import uuid
 from langchain_core.messages import HumanMessage, AIMessage
 from core.base import app
-# [新增] 导入数据库操作函数
 from database import save_chat_log, get_chat_history
 
 # --- 页面配置 ---

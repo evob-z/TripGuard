@@ -27,7 +27,8 @@ def silence_framework_warnings():
 silence_framework_warnings()
 
 # 4. 获取API_KEYS
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
+QWEN_API_KEY = os.getenv("QWEN_API_KEY")
 LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY")
 AMAP_MAPS_API_KEY = os.getenv("AMAP_MAPS_API_KEY")
 CHATGPT_API_KEY = os.getenv("CHATGPT_API_KEY")
@@ -40,8 +41,10 @@ DATABASE_URL = os.getenv(
     f"sqlite:///{os.path.join(os.path.dirname(os.path.abspath(__file__)), 'agent_verification.db')}"
 )
 
-if not OPENAI_API_KEY:
+if not DEEPSEEK_API_KEY:
     raise ValueError("× 请在.env中设置OPENAI_API_KEY")
+if not QWEN_API_KEY:
+    raise ValueError("× 请在.env中设置QWEN_API_KEY")
 if not LANGCHAIN_API_KEY:
     raise ValueError("× 请在.env中设置LANGCHAIN_API_KEY")
 if not AMAP_MAPS_API_KEY:

@@ -28,6 +28,10 @@ sentence-transformers>=5.0.0  # 会自动安装 torch 作为依赖
 transformers>=4.40.0
 pypdf==6.6.0
 
+# --- 评估和数据集 ---
+ragas>=0.2.0
+datasets>=3.0.0
+
 # --- 数据库 ---
 SQLAlchemy~=2.0.45
 PyMySQL>=1.1.0
